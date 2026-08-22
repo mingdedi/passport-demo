@@ -1,0 +1,20 @@
+idf_component_register(
+    SRCS "main.c"
+         "ui_theme.c"
+         "ui_anim.c"
+         "ui_boot.c"
+         "ui_home.c"
+         "page_sysinfo.c"
+         "page_display.c"
+         "page_audio.c"
+         "page_battery.c"
+         "page_input.c"
+         "page_radio.c"
+         "page_storage.c"
+         "page_about.c"
+         "app_sensors.c"
+         "app_audio.c"
+         "app_ble.c"
+    INCLUDE_DIRS "."
+    REQUIRES bsp bt nvs_flash esp_driver_tsens spi_flash esp_app_format
+)

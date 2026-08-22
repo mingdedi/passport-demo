@@ -1,0 +1,17 @@
+# 构建产物(idf.py build 生成, 可随时重建)
+build/
+
+# 由 sdkconfig.defaults 生成的本地配置(含本机路径差异)
+sdkconfig
+sdkconfig.old
+
+# idf.py 依据 main/idf_component.yml 自动拉取的组件
+# 版本由 dependencies.lock 锁定, 提交 lock 即可还原
+managed_components/
+
+# IDE / 工具缓存
+.vscode/
+.idea/
+.cache/
+.clang-format
+*.swp
