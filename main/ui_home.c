@@ -37,7 +37,7 @@ static void page_close(void) {
     if (s_active < 0) return;
     if (UI_PAGES[s_active]->exit) UI_PAGES[s_active]->exit();
     s_active = -1;
-    lv_screen_load_anim(s_menu_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 220, 0, true);
+    lv_screen_load_anim(s_menu_scr, LV_SCR_LOAD_ANIM_NONE, 0, 0, true);
     s_page_scr = NULL;
 }
 
@@ -49,8 +49,7 @@ static void page_open(int idx) {
     if (UI_PAGES[idx]->enter)
         UI_PAGES[idx]->enter(ui_content_get(s_page_scr));
 
-    app_audio_play(AUD_TRK_BEEP);           // 进页确认音
-    lv_screen_load_anim(s_page_scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 220, 0, false);
+    lv_screen_load_anim(s_page_scr, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
 }
 
 void ui_home_show(void) {
@@ -74,7 +73,7 @@ void ui_home_show(void) {
         menu_refresh();
     }
     // auto_del=true: 首次从 boot 屏切入时删除 boot 屏(本函数仅在开机后调用一次)
-    lv_screen_load_anim(s_menu_scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 220, 0, true);
+    lv_screen_load_anim(s_menu_scr, LV_SCR_LOAD_ANIM_NONE, 0, 0, true);
 }
 
 void ui_home_key(bsp_btn_t btn, bsp_btn_ev_t ev) {
