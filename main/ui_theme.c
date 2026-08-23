@@ -1,5 +1,5 @@
 // main/ui_theme.c -- 黑绿终端主题: 屏幕骨架(安全区边框/标题/内容区/状态栏)、面板、大数字。
-// 布局基线: unscii_16 每字符 16x16, 安全区 [6,226)x[6,312), 内容行宽 <=13 字符。
+// 布局基线: unscii_16 每字符 16x16, 安全区 [2,239)x[3,319)(screen-calib 实测), 内容行宽 <=13 字符。
 #include "ui.h"
 #include "app_sensors.h"
 
@@ -75,25 +75,25 @@ static void hline_make(lv_obj_t *scr, int32_t x, int32_t y, int32_t w, uint32_t 
 }
 
 static void statusbar_create(lv_obj_t *scr) {
-    hline_make(scr, 10, UI_SB_SEP_Y, UI_SAFE_W - 8, UI_DARK);
+    hline_make(scr, 6, UI_SB_SEP_Y, UI_SAFE_W - 8, UI_DARK);
 
     // 闪烁光标(独立 label, blink 定时器带悬空保护)
     lv_obj_t *cur = lv_label_create(scr);
     lv_obj_set_style_text_font(cur, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(cur, lv_color_hex(UI_INK), 0);
     lv_label_set_text(cur, "_");
-    lv_obj_set_pos(cur, 10, UI_SB_TXT_Y);
+    lv_obj_set_pos(cur, 6, UI_SB_TXT_Y);
     ui_anim_blink_start(cur, 530);
 
     lv_obj_t *left = lv_label_create(scr);
     lv_obj_set_style_text_font(left, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(left, lv_color_hex(UI_DIM), 0);
-    lv_obj_set_pos(left, 30, UI_SB_TXT_Y);
+    lv_obj_set_pos(left, 26, UI_SB_TXT_Y);
 
     lv_obj_t *right = lv_label_create(scr);
     lv_obj_set_style_text_font(right, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(right, lv_color_hex(UI_DIM), 0);
-    lv_obj_set_pos(right, 120, UI_SB_TXT_Y);
+    lv_obj_set_pos(right, 116, UI_SB_TXT_Y);
 
     if (s_sb_n < SB_MAX) {
         s_sbs[s_sb_n].left = left;
@@ -115,14 +115,15 @@ lv_obj_t *ui_screen_create(const char *title) {
     lv_obj_set_style_radius(scr, 0, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
 
-    // 安全区外框(避开外壳遮挡)
+    // 安全区外框(screen-calib 实测边界 2026-08-23: L2 T3 R1 B1)。顶部额外让 2px 呼吸;
+    // 四角 radius=26 = 外壳开孔圆角实测值, 再小框角会被壳圆角咬掉一截。
     lv_obj_t *frame = lv_obj_create(scr);
-    lv_obj_set_size(frame, UI_SAFE_W, UI_SAFE_H);
-    lv_obj_set_pos(frame, UI_SAFE_L, UI_SAFE_T);
+    lv_obj_set_size(frame, UI_SAFE_W, UI_SAFE_H - 2);
+    lv_obj_set_pos(frame, UI_SAFE_L, UI_SAFE_T + 2);
     lv_obj_set_style_bg_opa(frame, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_color(frame, lv_color_hex(UI_DARK), 0);
     lv_obj_set_style_border_width(frame, 1, 0);
-    lv_obj_set_style_radius(frame, 0, 0);
+    lv_obj_set_style_radius(frame, 26, 0);
     lv_obj_set_style_pad_all(frame, 0, 0);
     lv_obj_clear_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -131,14 +132,14 @@ lv_obj_t *ui_screen_create(const char *title) {
     lv_obj_set_style_text_font(t, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(UI_ACC), 0);
     lv_label_set_text_fmt(t, "[ %s ]", title);
-    lv_obj_set_pos(t, 12, 8);
+    lv_obj_set_pos(t, 8, 10);
 
-    hline_make(scr, 10, UI_HDR_SEP_Y, UI_SAFE_W - 8, UI_DARK);
+    hline_make(scr, 6, UI_HDR_SEP_Y, UI_SAFE_W - 8, UI_DARK);
 
     // 内容容器(给页面填充, 页面内坐标以此为原点: 216x250)
     lv_obj_t *cont = lv_obj_create(scr);
     lv_obj_set_size(cont, 216, UI_CONT_H);
-    lv_obj_set_pos(cont, 8, UI_CONT_Y);
+    lv_obj_set_pos(cont, 12, UI_CONT_Y);
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_style_pad_all(cont, 0, 0);
@@ -185,7 +186,7 @@ lv_obj_t *ui_label_make(lv_obj_t *parent, const char *text) {
 // 暗网格背景(菜单下方空白区几条 1px 线)
 void ui_grid_bg_install(lv_obj_t *scr) {
     for (int i = 0; i < 3; i++)
-        hline_make(scr, 10, 248 + i * 14, UI_SAFE_W - 8, UI_GRID);
+        hline_make(scr, 6, 248 + i * 14, UI_SAFE_W - 8, UI_GRID);
 }
 
 // ---------------------------------------------------------------------------

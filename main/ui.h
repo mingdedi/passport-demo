@@ -21,14 +21,15 @@
 #define UI_CH_W  16
 #define UI_CH_H  16
 
-// ---- 安全区: 外壳遮挡物理屏幕边缘(右侧最重), 所有关键内容收进此矩形 ----
-// 240x320 中可用区 x∈[6,226) y∈[6,312); 16px 字体每行最多 13 字符(208px)
-#define UI_SAFE_L 6
-#define UI_SAFE_R 14
-#define UI_SAFE_T 6
-#define UI_SAFE_B 8
-#define UI_SAFE_W (240 - UI_SAFE_L - UI_SAFE_R)   // 220
-#define UI_SAFE_H (320 - UI_SAFE_T - UI_SAFE_B)   // 306
+// ---- 安全区: 外壳遮挡实测边界(screen-calib 按键校准, 2026-08-23) ----
+// 240x320 中可用区 x∈[2,239) y∈[3,319); 壳开孔圆角实测 r=26(边框圆角须不小于它);
+// 16px 字体每行最多 14 字符(224px), 现有文案沿用 <=13
+#define UI_SAFE_L 2
+#define UI_SAFE_R 1
+#define UI_SAFE_T 3
+#define UI_SAFE_B 1
+#define UI_SAFE_W (240 - UI_SAFE_L - UI_SAFE_R)   // 237
+#define UI_SAFE_H (320 - UI_SAFE_T - UI_SAFE_B)   // 316
 
 // ---- 页面注册表 ----
 typedef struct {
