@@ -66,17 +66,6 @@ void ui_home_show(void) {
             lv_obj_set_pos(s_rows[i], 2, MENU_Y + i * ROW_STEP);
         }
 
-        // 跑马灯(13ch 窗口, 循环滚动)
-        lv_obj_t *mq = lv_label_create(cont);
-        lv_obj_set_style_text_font(mq, &lv_font_unscii_16, 0);
-        lv_obj_set_style_text_color(mq, lv_color_hex(UI_DARK), 0);
-        lv_label_set_long_mode(mq, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_set_size(mq, 208, 16);
-        lv_obj_set_pos(mq, 4, MENU_Y + 8 * ROW_STEP + 8);
-        lv_label_set_text(mq,
-            ">> ALL SYSTEMS NOMINAL // ESP32-C3 TERMINAL // "
-            "BLACK+GREEN FOREVER // SELECT MODULE AND PRESS OK ...   ");
-
         // 操作提示
         lv_obj_t *hint = ui_label_make(cont, "U/D:SEL OK:GO");
         lv_obj_set_style_text_color(hint, lv_color_hex(UI_DARK), 0);
