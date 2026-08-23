@@ -21,10 +21,12 @@ extern const ui_page_t page_input;
 extern const ui_page_t page_radio;
 extern const ui_page_t page_storage;
 extern const ui_page_t page_about;
+extern const ui_page_t page_matrix;
 
 const ui_page_t *const UI_PAGES[] = {
     &page_sysinfo, &page_display, &page_audio, &page_battery,
     &page_input,   &page_radio,  &page_storage, &page_about,
+    &page_matrix,
 };
 
 static void boot_done(void) {

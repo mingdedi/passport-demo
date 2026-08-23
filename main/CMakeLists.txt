@@ -12,6 +12,7 @@ idf_component_register(
          "page_radio.c"
          "page_storage.c"
          "page_about.c"
+         "page_matrix.c"
          "app_sensors.c"
          "app_audio.c"
          "app_ble.c"

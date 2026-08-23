@@ -11,14 +11,14 @@
 #define MENU_Y 2           // 内容容器内坐标
 
 static lv_obj_t *s_menu_scr;
-static lv_obj_t *s_rows[8];
+static lv_obj_t *s_rows[9];
 static int s_sel;
 static int s_active = -1;          // -1 = 菜单
 static lv_obj_t *s_page_scr;
 
 // 菜单行尾 ASCII 小图标(终端味)
-static const char *PAGE_ICONS[8] = {
-    "[#]", "[8]", "[o]", "[=]", "[^]", "[~]", "[:]", "[?]",
+static const char *PAGE_ICONS[9] = {
+    "[#]", "[8]", "[o]", "[=]", "[^]", "[~]", "[:]", "[?]", "[R]",
 };
 
 static void menu_refresh(void) {
@@ -68,7 +68,7 @@ void ui_home_show(void) {
         // 操作提示
         lv_obj_t *hint = ui_label_make(cont, "U/D:SEL OK:GO");
         lv_obj_set_style_text_color(hint, lv_color_hex(UI_DARK), 0);
-        lv_obj_set_pos(hint, 4, MENU_Y + 8 * ROW_STEP + 30);
+        lv_obj_set_pos(hint, 4, MENU_Y + 9 * ROW_STEP + 12);
 
         menu_refresh();
     }
