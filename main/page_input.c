@@ -15,8 +15,9 @@ static ev_cnt_t s_cnt[3];
 static lv_timer_t *s_timer;
 static int s_hold_btn = -1;
 
-static const char KEYNAME[3][3] = { "UP", "OK", "DN" };
-static const char KEYSYM[3][2]  = { "^", "O", "v" };
+// 顺序须与 bsp_btn_t 枚举一致(UP=0, DOWN=1, OK=2),btn 回调值直接做下标
+static const char KEYNAME[3][3] = { "UP", "DN", "OK" };
+static const char KEYSYM[3][2]  = { "^", "v", "O" };
 
 static void keybox_style(int i, bool lit) {
     lv_obj_set_style_bg_color(s_keybox[i], lv_color_hex(lit ? UI_PANEL : UI_BG2), 0);
