@@ -1,5 +1,7 @@
 # 构建产物(idf.py build 生成, 可随时重建)
 build/
+# Windows 时代构建缓存的留档(2026-08-24 迁移 Linux 时改名, CMake 缓存跨平台不可复用)
+build.win64.bak/
 
 # 由 sdkconfig.defaults 生成的本地配置(含本机路径差异)
 sdkconfig
