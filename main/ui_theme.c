@@ -179,7 +179,7 @@ lv_obj_t *ui_label_make(lv_obj_t *parent, const char *text) {
     lv_obj_t *l = lv_label_create(parent);
     lv_obj_set_style_text_font(l, &lv_font_unscii_16, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(UI_INK2), 0);
-    if (text) lv_label_set_text(l, text);
+    lv_label_set_text(l, text ? text : "");   // NULL 时勿留 LVGL 默认文本 "Text"
     return l;
 }
 

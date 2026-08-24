@@ -6,6 +6,7 @@
 #include "esp_mac.h"
 #include "esp_app_desc.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 #define K_X 2     // 键列(<=5ch)
 #define V_X 86    // 值列(<=8ch): 86+128=214
@@ -43,14 +44,17 @@ static void timer_cb(lv_timer_t *t) {
     uint32_t h = s->uptime_s / 3600, m = (s->uptime_s % 3600) / 60, sec = s->uptime_s % 60;
     lv_label_set_text_fmt(l_uptime, "%02u:%02u:%02u", (unsigned)h, (unsigned)m, (unsigned)sec);
 
-    if (s->temp_ok)
-        lv_label_set_text_fmt(l_temp, "%.1f C", (double)s->temp_c);
-    else
+    // LVGL 内置 printf 不支持 %f(LV_USE_FLOAT 未开), 用 0.1C 整数手工拼
+    if (s->temp_ok) {
+        int t10 = (int)(s->temp_c * 10 + (s->temp_c >= 0 ? 0.5 : -0.5));
+        lv_label_set_text_fmt(l_temp, "%d.%d C", t10 / 10, abs(t10 % 10));
+    } else {
         lv_label_set_text(l_temp, "N/A");
+    }
 
-    lv_label_set_text_fmt(l_heap1, "FREE %3dK", (int)(s->heap_free / 1024));
-    lv_label_set_text_fmt(l_heap2, "MIN  %3dK", (int)(s->heap_min / 1024));
-    lv_label_set_text_fmt(l_heap3, "BIG  %3dK", (int)(s->heap_largest / 1024));
+    lv_label_set_text_fmt(l_heap1, "%3dK", (int)(s->heap_free / 1024));
+    lv_label_set_text_fmt(l_heap2, "%3dK", (int)(s->heap_min / 1024));
+    lv_label_set_text_fmt(l_heap3, "%3dK", (int)(s->heap_largest / 1024));
     lv_bar_set_value(heap_bar, (int32_t)(s->heap_free * 100 / (400 * 1024)), LV_ANIM_ON);
 }
 
@@ -78,18 +82,16 @@ static void enter(lv_obj_t *root) {
     snprintf(ver, sizeof(ver), "%.5s", app->version);
     kv_make(root, "APP",   ver,         y, UI_ACC);    y += 24;
 
-    l_uptime = kv_make(root, "UPTIME", "00:00:00", y, UI_ACC);  y += 17;
-    l_temp   = kv_make(root, "TEMP",   "--",       y, UI_ACC);  y += 22;
+    l_uptime = kv_make(root, "UP",   "00:00:00", y, UI_ACC);  y += 17;
+    l_temp   = kv_make(root, "TEMP",   "--",     y, UI_ACC);  y += 22;
 
+    // HEAP 块: 表头独占一行, FREE/MIN/BIG 走键值行(键列 <=5ch, 值列 "170K" <=8ch)
     lv_obj_t *hk = ui_label_make(root, "HEAP");
     lv_obj_set_style_text_color(hk, lv_color_hex(UI_DARK), 0);
-    lv_obj_set_pos(hk, K_X, y);
-    l_heap1 = kv_make(root, NULL, "", y,      UI_INK2);
-    lv_obj_set_pos(l_heap1, V_X, y);      y += 17;
-    l_heap2 = kv_make(root, NULL, "", y,      UI_INK2);
-    lv_obj_set_pos(l_heap2, V_X, y);      y += 17;
-    l_heap3 = kv_make(root, NULL, "", y,      UI_INK2);
-    lv_obj_set_pos(l_heap3, V_X, y);      y += 20;
+    lv_obj_set_pos(hk, K_X, y);                       y += 17;
+    l_heap1 = kv_make(root, "FREE", "", y, UI_INK2);  y += 17;
+    l_heap2 = kv_make(root, "MIN",  "", y, UI_INK2);  y += 17;
+    l_heap3 = kv_make(root, "BIG",  "", y, UI_INK2);  y += 20;
 
     heap_bar = lv_bar_create(root);
     lv_obj_set_size(heap_bar, 208, 10);
