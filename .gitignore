@@ -17,3 +17,6 @@ managed_components/
 .cache/
 .clang-format
 *.swp
+
+# WiFi 凭据(本地私有, 模板见 wifi_secrets.h.example; CMake 缺文件会直接报错)
+main/wifi_secrets.h

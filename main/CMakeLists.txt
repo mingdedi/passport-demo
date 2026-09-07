@@ -1,3 +1,8 @@
+# WiFi 凭据不入开源仓库: 编译期强制要求本地存在 wifi_secrets.h(见 .example 模板)
+if(NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/wifi_secrets.h)
+    message(FATAL_ERROR "缺少 main/wifi_secrets.h: 复制 wifi_secrets.h.example 为 wifi_secrets.h 并填入 SSID/密码(该文件已被 .gitignore 排除)")
+endif()
+
 idf_component_register(
     SRCS "main.c"
          "ui_theme.c"
@@ -15,8 +20,9 @@ idf_component_register(
          "page_about.c"
          "page_matrix.c"
          "app_sensors.c"
+         "app_wifi.c"
          "app_audio.c"
          "app_ble.c"
     INCLUDE_DIRS "."
-    REQUIRES bsp bt nvs_flash esp_driver_tsens spi_flash esp_app_format
+    REQUIRES bsp bt nvs_flash esp_driver_tsens spi_flash esp_app_format esp_partition esp_wifi esp_netif
 )
