@@ -26,4 +26,5 @@ typedef struct {
 } app_glm_snap_t;
 
 void app_glm_start(void);                       // app_main 里在 app_wifi_start 之后调
+void app_glm_refresh_now(void);                 // 立即查一次(双击 OK 触发, 不等 5min)
 const app_glm_snap_t *app_glm_snap(void);       // 只读快照, UI 轮询

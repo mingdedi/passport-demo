@@ -3,7 +3,8 @@
 // 电池/内存/Flash 纯 kv 行(无用量条, 竖向空间让给 GLM 区); GLM 区: 5h/周套餐
 // 用量(app_glm 5min 快照), 值列左移 G_X 宽 10ch, 长值不再抵右边框。
 // WiFi/GLM 服务快照由各自服务提供, 本屏 1s 轮询。
-// 排版沿用分支页 kv 网格; OK 键进菜单(菜单态 OK 长按回本屏)。
+// 键位: OK 长按进菜单(菜单态 OK 长按回本屏); 双击 OK 立即刷新
+// WiFi 扫描/NTP/GLM 额度(不等各自周期)。
 #include "ui.h"
 #include "app_sensors.h"
 #include "app_wifi.h"
@@ -277,15 +278,6 @@ static void build(void) {
 
     ui_hline_make(cont, 2, 215, 212, UI_DARK);
 
-    // 导航提示: 闪烁 ">" 终端待输入暗示(同状态栏光标节奏)
-    lv_obj_t *prompt = ui_label_make(cont, ">");
-    lv_obj_set_style_text_color(prompt, lv_color_hex(UI_INK), 0);
-    lv_obj_set_pos(prompt, 2, 223);
-    ui_anim_blink_start(prompt, 530);
-    lv_obj_t *hint = ui_label_make(cont, "OK:MENU");
-    lv_obj_set_style_text_color(hint, lv_color_hex(UI_DARK), 0);
-    lv_obj_set_pos(hint, 20, 223);
-
     timer_cb(NULL);
     s_timer = lv_timer_create(timer_cb, 1000, NULL);
 }
@@ -303,7 +295,12 @@ void ui_main_key(bsp_btn_t btn, bsp_btn_ev_t ev) {
         ui_home_key(btn, ev);
         return;
     }
-    // 主界面: OK 单击 = 进菜单
-    if (btn == BSP_BTN_OK && ev == BSP_BTN_CLICK)
+    // 主界面: OK 长按进菜单; 双击立即刷新在线数据(屏幕上 NET/GLM 状态即时反馈)
+    if (btn != BSP_BTN_OK) return;
+    if (ev == BSP_BTN_LONG) {
         ui_home_show();
+    } else if (ev == BSP_BTN_DOUBLE) {
+        app_wifi_resync();
+        app_glm_refresh_now();
+    }
 }

@@ -1,5 +1,5 @@
 // main/ui_home.c -- 菜单屏 + 页面导航(进入/返回/转场动画/按键路由)。
-// 开机先进主界面(ui_main), 主界面按 OK 进本菜单; 菜单态 OK 长按回主界面。
+// 开机先进主界面(ui_main), 主界面 OK 长按进本菜单; 菜单态 OK 长按回主界面。
 // 菜单行 = 单 label(13ch: "NN NAME    ICON"), 选中行整行反色(绿底黑字)。
 #include "ui.h"
 #include "app_audio.h"

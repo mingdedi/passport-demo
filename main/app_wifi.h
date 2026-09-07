@@ -18,4 +18,5 @@ typedef struct {
 } app_wifi_snap_t;
 
 void app_wifi_start(void);
+void app_wifi_resync(void);            // 立即刷新: 离线重扫 / 在线重启 NTP 对时
 const app_wifi_snap_t *app_wifi_snap(void);

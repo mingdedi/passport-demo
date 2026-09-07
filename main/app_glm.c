@@ -26,6 +26,7 @@ static const char *TAG = "glm";
 #define GLM_TIMEOUT_MS 8000   // 单次请求超时(shell 版 3s, 设备 TLS 握手放宽)
 
 static app_glm_snap_t s_snap;
+static TaskHandle_t s_task;       // 立即刷新通知用; NOKEY 自删后置空防悬空句柄
 
 // 占位/空 Key 视为未配置, 不发请求(UI 显示 NO KEY, 免无效流量)
 static bool key_ok(void) {
@@ -111,16 +112,19 @@ static void glm_task(void *arg) {
     if (!key_ok()) {
         s_snap.state = APP_GLM_NOKEY;
         ESP_LOGW(TAG, "GLM_API_KEY 未配置, 用量区显示 NO KEY");
+        s_task = NULL;
         vTaskDelete(NULL);
         return;
     }
 
     time_t last_try = 0;
     for (;;) {
+        // 等轮询节拍或立即刷新通知(双击 OK), 任一先到即醒
+        bool force = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(GLM_POLL_S * 1000)) > 0;
         const app_wifi_snap_t *w = app_wifi_snap();
         time_t now = time(NULL);
         if (w->state == APP_WIFI_ONLINE && w->time_valid &&
-            now - last_try >= GLM_PERIOD_S) {     // last_try=0 时首查立即触发; 失败也按周期退避
+            (force || now - last_try >= GLM_PERIOD_S)) {   // last_try=0 首查立即; 失败按周期退避
             last_try = now;
             s_snap.state = APP_GLM_FETCH;
             char *buf = malloc(2048);
@@ -146,15 +150,19 @@ static void glm_task(void *arg) {
                 free(buf);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(GLM_POLL_S * 1000));
     }
 }
 
 void app_glm_start(void) {
     memset(&s_snap, 0, sizeof(s_snap));
     s_snap.state = APP_GLM_WAIT;
-    // 8K 栈覆盖 TLS 握手 + cJSON; 任务常驻但绝大多数时间在 vTaskDelay
-    xTaskCreate(glm_task, "glm", 8192, NULL, 4, NULL);
+    // 8K 栈覆盖 TLS 握手 + cJSON; 任务常驻但绝大多数时间在等通知/节拍
+    xTaskCreate(glm_task, "glm", 8192, NULL, 4, &s_task);
+}
+
+void app_glm_refresh_now(void) {
+    // 置值 1: 任务侧 ulTaskNotifyTake 以返回值>0 识别通知, eNoAction 不改值会与超时混淆
+    if (s_task) xTaskNotify(s_task, 1, eSetValueWithoutOverwrite);
 }
 
 const app_glm_snap_t *app_glm_snap(void) { return &s_snap; }

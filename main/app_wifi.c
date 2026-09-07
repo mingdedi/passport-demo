@@ -109,6 +109,22 @@ static void scan_timer_cb(void *arg) {
     }
 }
 
+// 立即刷新在线数据(主界面双击 OK 触发): 离线则马上重扫(不清重试计数上限的
+// 语义不变, 事件流自动接续连接/NTP/GLM 首查); 已在线不扫(扫描会瞬断),
+// 改为重启 SNTP 立即对时, 不等它的周期同步。
+void app_wifi_resync(void) {
+    if (s_snap.state == APP_WIFI_ONLINE) {
+        if (s_sntp_started) {
+            esp_netif_sntp_deinit();
+            s_sntp_started = false;         // 让 sntp_begin 重新拉起
+            sntp_begin();
+        }
+    } else {
+        s_join_retries = 0;
+        scan_start();
+    }
+}
+
 void app_wifi_start(void) {
     strncpy((char *)s_filter, WIFI_SSID, sizeof(s_filter) - 1);
     s_snap.state = APP_WIFI_OFFLINE;
