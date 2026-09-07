@@ -1,7 +1,7 @@
 // main/ui_main.c -- 主界面(开机首屏): 系统仪表盘(在线区+离线区+GLM 用量区)。
 // 在线区: NET 状态(联动标题行 wifi 点阵图标)与 NTP 上海时间; 离线区: 温度/
 // 电池/内存/Flash 纯 kv 行(无用量条, 竖向空间让给 GLM 区); GLM 区: 5h/周套餐
-// 用量(app_glm 5min 快照), 值列左移 G_X 宽 10ch, 长值不再抵右边框。
+// 用量(app_glm 5min 快照), 每窗三行(数值/百分比条/重置), 值列左移 G_X。
 // WiFi/GLM 服务快照由各自服务提供, 本屏 1s 轮询。
 // 键位: OK 长按进菜单(菜单态 OK 长按回本屏); 双击 OK 立即刷新
 // WiFi 扫描/NTP/GLM 额度(不等各自周期)。
@@ -27,6 +27,7 @@ static lv_obj_t *s_scr;
 static lv_timer_t *s_timer;
 static lv_obj_t *l_net, *l_time, *l_temp, *l_batt, *l_heap;
 static lv_obj_t *l_glm, *l_5h, *l_wk, *l_r5, *l_rw;
+static lv_obj_t *bar_5h, *bar_wk;
 
 // ---- NET 状态图标: 7x5 点阵 wifi(3px/点), 挂在标题行右端(屏幕坐标) ----
 // 标题 "[ PASSPORT ]" 止于 x=200; 图标 206 起 21px 宽, 已避开右上圆角(实测 r=26)
@@ -104,6 +105,21 @@ static lv_obj_t *kv_make(lv_obj_t *root, const char *key, const char *val,
     return kv_row(root, key, K_X, val, V_X, y, vcol);
 }
 
+// 用量条(同分支页样式: 208x10, 暗底细框), GLM 两窗百分比
+static lv_obj_t *bar_make(lv_obj_t *root, int32_t y) {
+    lv_obj_t *b = lv_bar_create(root);
+    lv_obj_set_size(b, 208, 10);
+    lv_obj_set_pos(b, 2, y);
+    lv_bar_set_range(b, 0, 100);
+    lv_obj_set_style_bg_color(b, lv_color_hex(UI_BG2), 0);
+    lv_obj_set_style_border_color(b, lv_color_hex(UI_DARK), 0);
+    lv_obj_set_style_border_width(b, 1, 0);
+    lv_obj_set_style_radius(b, 0, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(UI_INK2), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(b, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    return b;
+}
+
 // ---- GLM 用量区 ----
 // 额度缩写: <1万原样; K/M 档只有一位整数时带一位小数(9.9K), 否则取整(12K/17M)。
 // 单值 <=4 字符, "已用/总额" 卡进 GLM 值列 10 字符宽(1074/12K)
@@ -122,7 +138,8 @@ static void fmt_q(char *out, int64_t v) {
     }
 }
 
-static void win_refresh(const app_glm_snap_t *g, bool is5, lv_obj_t *val, lv_obj_t *rst) {
+static void win_refresh(const app_glm_snap_t *g, bool is5,
+                        lv_obj_t *val, lv_obj_t *bar, lv_obj_t *rst) {
     if (is5 ? g->has5 : g->hasw) {
         char a[8], b[8], v[16];
         fmt_q(a, is5 ? g->used5 : g->usedw);
@@ -130,6 +147,7 @@ static void win_refresh(const app_glm_snap_t *g, bool is5, lv_obj_t *val, lv_obj
         sprintf(v, "%s/%s", a, b);
         lv_label_set_text(val, v);
         lv_obj_set_style_text_color(val, lv_color_hex(UI_INK2), 0);
+        lv_bar_set_value(bar, is5 ? g->pct5 : g->pctw, LV_ANIM_OFF);
         struct tm tm;
         time_t t = (time_t)((is5 ? g->reset5_ms : g->resetw_ms) / 1000);
         localtime_r(&t, &tm);                    // TZ=上海, app_wifi 同步时已设
@@ -140,6 +158,7 @@ static void win_refresh(const app_glm_snap_t *g, bool is5, lv_obj_t *val, lv_obj
     } else {
         lv_label_set_text(val, "N/A");
         lv_obj_set_style_text_color(val, lv_color_hex(UI_DIM), 0);
+        lv_bar_set_value(bar, 0, LV_ANIM_OFF);
         lv_label_set_text(rst, "-");
     }
 }
@@ -175,8 +194,8 @@ static void glm_refresh(const app_wifi_snap_t *w) {
     lv_label_set_text(l_glm, txt);
     lv_obj_set_style_text_color(l_glm, lv_color_hex(col), 0);
 
-    win_refresh(g, true, l_5h, l_r5);
-    win_refresh(g, false, l_wk, l_rw);
+    win_refresh(g, true, l_5h, bar_5h, l_r5);
+    win_refresh(g, false, l_wk, bar_wk, l_rw);
 }
 
 // 主屏常驻(仅构建一次), 本定时器与状态栏定时器同寿命, 无需清理
@@ -265,18 +284,20 @@ static void build(void) {
 
     ui_hline_make(cont, 2, 117, 212, UI_DARK);
 
-    // -- GLM 用量区: 每窗两行(已用/总额 + 百分比&重置), 值列左移 G_X 宽 10ch --
-    l_glm = kv_row(cont, "GLM", K_X, "WAIT", G_X, 125, UI_DIM);
-    l_5h  = kv_row(cont, "5H",  K_X, "N/A",  G_X, 143, UI_DIM);
-    l_r5  = ui_label_make(cont, "-");          // 子行无键, 与值列对齐缩进
+    // -- GLM 用量区: 每窗三行(已用/总额 + 百分比条 + 百分比&重置), 值列左移 G_X --
+    l_glm  = kv_row(cont, "GLM", K_X, "WAIT", G_X, 125, UI_DIM);
+    l_5h   = kv_row(cont, "5H",  K_X, "N/A",  G_X, 143, UI_DIM);
+    bar_5h = bar_make(cont, 161);
+    l_r5   = ui_label_make(cont, "-");          // 子行无键, 与值列对齐缩进
     lv_obj_set_style_text_color(l_r5, lv_color_hex(UI_DIM), 0);
-    lv_obj_set_pos(l_r5, G_X, 161);
-    l_wk  = kv_row(cont, "WK",  K_X, "N/A",  G_X, 179, UI_DIM);
-    l_rw  = ui_label_make(cont, "-");
+    lv_obj_set_pos(l_r5, G_X, 173);
+    l_wk   = kv_row(cont, "WK",  K_X, "N/A",  G_X, 191, UI_DIM);
+    bar_wk = bar_make(cont, 209);
+    l_rw   = ui_label_make(cont, "-");
     lv_obj_set_style_text_color(l_rw, lv_color_hex(UI_DIM), 0);
-    lv_obj_set_pos(l_rw, G_X, 197);
+    lv_obj_set_pos(l_rw, G_X, 221);
 
-    ui_hline_make(cont, 2, 215, 212, UI_DARK);
+    ui_hline_make(cont, 2, 239, 212, UI_DARK);
 
     timer_cb(NULL);
     s_timer = lv_timer_create(timer_cb, 1000, NULL);
