@@ -1,4 +1,4 @@
-// main/main.c -- passport-demo 入口: 外设初始化 -> 开机动画 -> 主菜单; 按键全局路由。
+// main/main.c -- passport-demo 入口: 外设初始化 -> 开机动画 -> 主界面; 按键全局路由。
 #include "ui.h"
 #include "bsp_i2c.h"
 #include "bsp_display.h"
@@ -32,7 +32,7 @@ const ui_page_t *const UI_PAGES[] = {
 static void boot_done(void) {
     // 开机音(音频可用时): 琶音确认
     app_audio_play(AUD_TRK_MELODY);
-    ui_home_show();
+    ui_main_show();               // 开机首屏 = 主界面, OK 进菜单
 }
 
 static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user) {
@@ -43,7 +43,7 @@ static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user) {
         if (btn == BSP_BTN_OK && (ev == BSP_BTN_PRESS || ev == BSP_BTN_CLICK))
             ui_boot_skip();
     } else {
-        ui_home_key(btn, ev);
+        ui_main_key(btn, ev);     // 主界面/菜单/页面统一入口
     }
     bsp_lvgl_unlock();
 }

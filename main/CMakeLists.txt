@@ -3,6 +3,7 @@ idf_component_register(
          "ui_theme.c"
          "ui_anim.c"
          "ui_boot.c"
+         "ui_main.c"
          "ui_home.c"
          "page_sysinfo.c"
          "page_display.c"

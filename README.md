@@ -59,8 +59,9 @@ idf.py -p /dev/ttyACM0 flash monitor   # device exposes a native USB-Serial/JTAG
 ```
 main/
   main.c          app entry, peripheral init, global key routing
-  ui_boot.c       boot animation (character shower -> menu reveal)
-  ui_home.c       main menu + navigation (enter/back/transitions/key routing)
+  ui_boot.c       boot animation (character shower -> home reveal)
+  ui_main.c       home screen (boot landing): brand/battery + [MENU] button; OK enters menu
+  ui_home.c       menu screen + navigation (enter/back/transitions/key routing)
   ui_theme.c      screen scaffold: safe-area frame, title, status bar, panels
   ui_anim.c       shared animation helpers (slide/fade/blink/typewriter)
   page_*.c        the nine demo pages

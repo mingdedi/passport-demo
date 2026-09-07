@@ -63,8 +63,8 @@ static void statusbar_timer_cb(lv_timer_t *t) {
     }
 }
 
-static void hline_make(lv_obj_t *scr, int32_t x, int32_t y, int32_t w, uint32_t color) {
-    lv_obj_t *l = lv_obj_create(scr);
+void ui_hline_make(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, uint32_t color) {
+    lv_obj_t *l = lv_obj_create(parent);
     lv_obj_set_size(l, w, 1);
     lv_obj_set_pos(l, x, y);
     lv_obj_set_style_bg_color(l, lv_color_hex(color), 0);
@@ -75,7 +75,7 @@ static void hline_make(lv_obj_t *scr, int32_t x, int32_t y, int32_t w, uint32_t 
 }
 
 static void statusbar_create(lv_obj_t *scr) {
-    hline_make(scr, 6, UI_SB_SEP_Y, UI_SAFE_W - 8, UI_DARK);
+    ui_hline_make(scr, 6, UI_SB_SEP_Y, UI_SAFE_W - 8, UI_DARK);
 
     // 闪烁光标(独立 label, blink 定时器带悬空保护)
     lv_obj_t *cur = lv_label_create(scr);
@@ -134,7 +134,7 @@ lv_obj_t *ui_screen_create(const char *title) {
     lv_label_set_text_fmt(t, "[ %s ]", title);
     lv_obj_set_pos(t, 8, 10);
 
-    hline_make(scr, 6, UI_HDR_SEP_Y, UI_SAFE_W - 8, UI_DARK);
+    ui_hline_make(scr, 6, UI_HDR_SEP_Y, UI_SAFE_W - 8, UI_DARK);
 
     // 内容容器(给页面填充, 页面内坐标以此为原点: 216x250)
     lv_obj_t *cont = lv_obj_create(scr);
@@ -186,7 +186,7 @@ lv_obj_t *ui_label_make(lv_obj_t *parent, const char *text) {
 // 暗网格背景(菜单下方空白区几条 1px 线)
 void ui_grid_bg_install(lv_obj_t *scr) {
     for (int i = 0; i < 3; i++)
-        hline_make(scr, 6, 248 + i * 14, UI_SAFE_W - 8, UI_GRID);
+        ui_hline_make(scr, 6, 248 + i * 14, UI_SAFE_W - 8, UI_GRID);
 }
 
 // ---------------------------------------------------------------------------

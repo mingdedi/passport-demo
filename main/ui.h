@@ -47,15 +47,20 @@ void ui_boot_play(void (*on_done)(void));
 bool ui_boot_active(void);
 void ui_boot_skip(void);
 
-// ---- ui_home(导航) ----
-void ui_home_show(void);                  // 构建并载入主菜单(带入场动画)
-void ui_home_key(bsp_btn_t btn, bsp_btn_ev_t ev);   // 全局按键路由入口
+// ---- ui_main(主界面) ----
+void ui_main_show(void);                             // 构建并载入主界面(开机首屏)
+void ui_main_key(bsp_btn_t btn, bsp_btn_ev_t ev);    // 全局按键路由入口(主界面/菜单/页面)
+
+// ---- ui_home(菜单屏) ----
+void ui_home_show(void);                  // 构建并载入菜单屏(主界面按 OK 进入)
+void ui_home_key(bsp_btn_t btn, bsp_btn_ev_t ev);   // 菜单与页内按键(经 ui_main_key 分发)
 
 // ---- ui_theme ----
 lv_obj_t *ui_screen_create(const char *title);       // 边框+标题条+内容区+状态栏
 lv_obj_t *ui_content_get(lv_obj_t *scr);
 lv_obj_t *ui_term_panel(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, int32_t h);
 lv_obj_t *ui_label_make(lv_obj_t *parent, const char *text);
+void ui_hline_make(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, uint32_t color);
 void ui_grid_bg_install(lv_obj_t *scr);
 
 // 大数字(3 段码点阵, 0-999)

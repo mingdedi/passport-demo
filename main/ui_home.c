@@ -1,4 +1,5 @@
-// main/ui_home.c -- 主菜单 + 页面导航(进入/返回/转场动画/按键路由)。
+// main/ui_home.c -- 菜单屏 + 页面导航(进入/返回/转场动画/按键路由)。
+// 开机先进主界面(ui_main), 主界面按 OK 进本菜单; 菜单态 OK 长按回主界面。
 // 菜单行 = 单 label(13ch: "NN NAME    ICON"), 选中行整行反色(绿底黑字)。
 #include "ui.h"
 #include "app_audio.h"
@@ -54,7 +55,7 @@ static void page_open(int idx) {
 
 void ui_home_show(void) {
     if (!s_menu_scr) {
-        s_menu_scr = ui_screen_create("PASSPORT");
+        s_menu_scr = ui_screen_create("MENU");
         lv_obj_t *cont = ui_content_get(s_menu_scr);
         ui_grid_bg_install(s_menu_scr);
 
@@ -65,15 +66,19 @@ void ui_home_show(void) {
             lv_obj_set_pos(s_rows[i], 2, MENU_Y + i * ROW_STEP);
         }
 
-        // 操作提示
+        // 操作提示(两行: 选择/进入 + 长按返回主界面)
         lv_obj_t *hint = ui_label_make(cont, "U/D:SEL OK:GO");
         lv_obj_set_style_text_color(hint, lv_color_hex(UI_DARK), 0);
-        lv_obj_set_pos(hint, 4, MENU_Y + 9 * ROW_STEP + 12);
+        lv_obj_set_pos(hint, 4, 176);
+
+        lv_obj_t *hint2 = ui_label_make(cont, "HOLD OK:HOME");
+        lv_obj_set_style_text_color(hint2, lv_color_hex(UI_DARK), 0);
+        lv_obj_set_pos(hint2, 4, 194);
 
         menu_refresh();
     }
-    // auto_del=true: 首次从 boot 屏切入时删除 boot 屏(本函数仅在开机后调用一次)
-    lv_screen_load_anim(s_menu_scr, LV_SCR_LOAD_ANIM_NONE, 0, 0, true);
+    // 主界面与菜单屏均常驻互跳, 勿 auto_del(否则会把主界面删掉)
+    lv_screen_load_anim(s_menu_scr, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
 }
 
 void ui_home_key(bsp_btn_t btn, bsp_btn_ev_t ev) {
@@ -86,6 +91,13 @@ void ui_home_key(bsp_btn_t btn, bsp_btn_ev_t ev) {
         }
         if (UI_PAGES[s_active]->key)
             UI_PAGES[s_active]->key(btn, ev);
+        return;
+    }
+
+    // 菜单态: OK 长按返回主界面(与页内返回同手势)
+    if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
+        app_audio_stop();
+        ui_main_show();
         return;
     }
 

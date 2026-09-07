@@ -32,7 +32,8 @@ components/bsp/        板级支持包（源自 FoloToy/ai-passport，MIT）
 main/
   main.c               入口 + 按键全局路由；UI_PAGES[] 页面注册表
   ui_theme.c           屏幕骨架：安全区外框/标题/内容区/状态栏（页面都基于它构建）
-  ui_home.c            主菜单 + 页面导航/转场/按键分发
+  ui_main.c            主界面（开机首屏）：品牌/大号电量 + [MENU] 按钮；OK=点击 MENU 进菜单
+  ui_home.c            菜单屏 + 页面导航/转场/按键分发（菜单态 OK 长按回主界面）
   ui_boot.c            开机动画
   ui_anim.c            动效工具（滑入/淡入/闪烁/打字机）
   page_*.c             9 个演示页，一页一文件
@@ -45,8 +46,8 @@ partitions.csv         nvs 24K + phy 4K + factory 3MB（勿删，默认 1MB 装�
 
 ## 运行时架构
 
-- **启动**：`app_main()` 初始化外设 → `ui_boot_play()` 开机动画 → 回调 `ui_home_show()` 主菜单。
-- **按键路由**：`bsp_button` 回调（button 组件定时器任务上下文）→ `main.c:on_key()` **先拿 LVGL 锁** → `ui_home_key()` → 菜单态处理或分发到当前页 `key()`。页面内 OK 长按返回由 `ui_home_key` 统一处理。
+- **启动**：`app_main()` 初始化外设 → `ui_boot_play()` 开机动画 → 回调 `ui_main_show()` 主界面 → OK 单击进菜单屏（`ui_home_show()`）。
+- **按键路由**：`bsp_button` 回调（button 组件定时器任务上下文）→ `main.c:on_key()` **先拿 LVGL 锁** → `ui_main_key()`（主界面态就地处理，其余转 `ui_home_key()`）→ 菜单态处理或分发到当前页 `key()`。页面内 OK 长按返回菜单、菜单态 OK 长按回主界面，均由 `ui_home_key` 统一处理。
 - **页面模型**：`ui_page_t { id, enter, exit, key }`（ui.h）。`enter(root)` 构建页面（root 是内容容器，坐标相对容器）；`exit()` 清理页面私有资源（删自建 lv_timer 等）；`key()` 收按键事件。
 - **线程/LVGL 锁模型**：页面 `enter/key/exit` 与 lv_timer 回调都已在 LVGL 上下文内，可直接调 LVGL API；**只有从其他任务碰 UI 才需要 `bsp_lvgl_lock()`**。服务模块（app_sensors 等）从不直接碰 UI，页面用 `lv_timer` 轮询快照（`app_sensors_snap()` 返回只读指针）。
 - **按键枚举即下标**：`bsp_btn_t` 为 UP=0, DOWN=1, OK=2，页面里直接当数组索引用。
