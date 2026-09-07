@@ -31,8 +31,6 @@ const ui_page_t *const UI_PAGES[] = {
 };
 
 static void boot_done(void) {
-    // 开机音(音频可用时): 琶音确认
-    app_audio_play(AUD_TRK_MELODY);
     ui_main_show();               // 开机首屏 = 主界面, OK 进菜单
 }
 
