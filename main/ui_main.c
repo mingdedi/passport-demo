@@ -1,10 +1,13 @@
-// main/ui_main.c -- 主界面(开机首屏): 系统仪表盘(离线区+在线区)。
-// 离线区: 温度/电池/内存/Flash; 在线区: NET 状态(联动标题行 wifi 点阵图标)与
-// NTP 同步的上海时间。WiFi 服务快照由 app_wifi 提供, 本屏 1s 轮询。
+// main/ui_main.c -- 主界面(开机首屏): 系统仪表盘(在线区+离线区+GLM 用量区)。
+// 在线区: NET 状态(联动标题行 wifi 点阵图标)与 NTP 上海时间; 离线区: 温度/
+// 电池/内存/Flash 纯 kv 行(无用量条, 竖向空间让给 GLM 区); GLM 区: 5h/周套餐
+// 用量(app_glm 5min 快照), 值列左移 G_X 宽 10ch, 长值不再抵右边框。
+// WiFi/GLM 服务快照由各自服务提供, 本屏 1s 轮询。
 // 排版沿用分支页 kv 网格; OK 键进菜单(菜单态 OK 长按回本屏)。
 #include "ui.h"
 #include "app_sensors.h"
 #include "app_wifi.h"
+#include "app_glm.h"
 
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
@@ -13,14 +16,16 @@
 #include <string.h>
 #include <time.h>
 
-// kv 列基线(同 page_sysinfo: 键列 <=5ch, 值列 <=8ch, 86+128=214)
+// kv 列基线: 系统区同 page_sysinfo(键 <=5ch, 值 <=8ch, 86+128=214);
+// GLM 区键短, 值列左移 G_X 放宽到 10ch(54+160=214), 收在容器宽 216 内
 #define K_X 2
 #define V_X 86
+#define G_X 54
 
 static lv_obj_t *s_scr;
 static lv_timer_t *s_timer;
 static lv_obj_t *l_net, *l_time, *l_temp, *l_batt, *l_heap;
-static lv_obj_t *bar_batt, *bar_heap, *bar_flash;
+static lv_obj_t *l_glm, *l_5h, *l_wk, *l_r5, *l_rw;
 
 // ---- NET 状态图标: 7x5 点阵 wifi(3px/点), 挂在标题行右端(屏幕坐标) ----
 // 标题 "[ PASSPORT ]" 止于 x=200; 图标 206 起 21px 宽, 已避开右上圆角(实测 r=26)
@@ -81,30 +86,96 @@ static uint32_t app_image_len(const esp_partition_t *p) {
     return off + 1;                           // + 校验和字节(末尾对齐填充忽略)
 }
 
-static lv_obj_t *kv_make(lv_obj_t *root, const char *key, const char *val,
-                         int32_t y, uint32_t vcol) {
+// kv 行(列位可指定); kv_make=系统区基线, GLM 区用 kv_row 左移值列
+static lv_obj_t *kv_row(lv_obj_t *root, const char *key, int32_t kx,
+                        const char *val, int32_t vx, int32_t y, uint32_t vcol) {
     lv_obj_t *k = ui_label_make(root, key);
     lv_obj_set_style_text_color(k, lv_color_hex(UI_DARK), 0);
-    lv_obj_set_pos(k, K_X, y);
+    lv_obj_set_pos(k, kx, y);
     lv_obj_t *v = ui_label_make(root, val);
     lv_obj_set_style_text_color(v, lv_color_hex(vcol), 0);
-    lv_obj_set_pos(v, V_X, y);
+    lv_obj_set_pos(v, vx, y);
     return v;
 }
 
-// 用量条(同分支页样式: 208x10, 暗底细框)
-static lv_obj_t *bar_make(lv_obj_t *root, int32_t y) {
-    lv_obj_t *b = lv_bar_create(root);
-    lv_obj_set_size(b, 208, 10);
-    lv_obj_set_pos(b, 2, y);
-    lv_bar_set_range(b, 0, 100);
-    lv_obj_set_style_bg_color(b, lv_color_hex(UI_BG2), 0);
-    lv_obj_set_style_border_color(b, lv_color_hex(UI_DARK), 0);
-    lv_obj_set_style_border_width(b, 1, 0);
-    lv_obj_set_style_radius(b, 0, 0);
-    lv_obj_set_style_bg_color(b, lv_color_hex(UI_INK2), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(b, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    return b;
+static lv_obj_t *kv_make(lv_obj_t *root, const char *key, const char *val,
+                         int32_t y, uint32_t vcol) {
+    return kv_row(root, key, K_X, val, V_X, y, vcol);
+}
+
+// ---- GLM 用量区 ----
+// 额度缩写: <1万原样; K/M 档只有一位整数时带一位小数(9.9K), 否则取整(12K/17M)。
+// 单值 <=4 字符, "已用/总额" 卡进 GLM 值列 10 字符宽(1074/12K)
+static void fmt_q(char *out, int64_t v) {
+    if (v < 0) { strcpy(out, "?"); return; }
+    if (v < 10000) {
+        sprintf(out, "%d", (int)v);
+    } else if (v < 1000000) {
+        int k = (int)((v + 500) / 1000);
+        if (k < 10) sprintf(out, "%d.%dK", k / 10, k % 10);
+        else sprintf(out, "%dK", k);
+    } else {
+        int m = (int)((v + 500000) / 1000000);
+        if (m < 10) sprintf(out, "%d.%dM", m / 10, m % 10);
+        else sprintf(out, "%dM", m > 999 ? 999 : m);
+    }
+}
+
+static void win_refresh(const app_glm_snap_t *g, bool is5, lv_obj_t *val, lv_obj_t *rst) {
+    if (is5 ? g->has5 : g->hasw) {
+        char a[8], b[8], v[16];
+        fmt_q(a, is5 ? g->used5 : g->usedw);
+        fmt_q(b, is5 ? g->total5 : g->totalw);
+        sprintf(v, "%s/%s", a, b);
+        lv_label_set_text(val, v);
+        lv_obj_set_style_text_color(val, lv_color_hex(UI_INK2), 0);
+        struct tm tm;
+        time_t t = (time_t)((is5 ? g->reset5_ms : g->resetw_ms) / 1000);
+        localtime_r(&t, &tm);                    // TZ=上海, app_wifi 同步时已设
+        if (is5)  // 5h 窗看重置时刻(今天几点), 周窗看重置日期(几月几号)
+            lv_label_set_text_fmt(rst, "%d%%R%02d:%02d", g->pct5, tm.tm_hour, tm.tm_min);
+        else
+            lv_label_set_text_fmt(rst, "%d%%R%02d-%02d", g->pctw, tm.tm_mon + 1, tm.tm_mday);
+    } else {
+        lv_label_set_text(val, "N/A");
+        lv_obj_set_style_text_color(val, lv_color_hex(UI_DIM), 0);
+        lv_label_set_text(rst, "-");
+    }
+}
+
+// 快照变化才重绘(拼接多, 避免每秒重跑); 离线时把 WAIT 细化为 NO NET
+static void glm_refresh(const app_wifi_snap_t *w) {
+    static app_glm_snap_t last;
+    const app_glm_snap_t *g = app_glm_snap();
+    if (memcmp(&last, g, sizeof last) == 0) return;
+    last = *g;
+
+    const char *txt = "WAIT";
+    uint32_t col = UI_DIM;
+    char tbuf[16];
+    switch (g->state) {
+    case APP_GLM_OK: {
+        struct tm tm;
+        localtime_r(&g->fetched_at, &tm);
+        snprintf(tbuf, sizeof tbuf, "OK %02d:%02d", tm.tm_hour, tm.tm_min);
+        txt = tbuf; col = UI_ACC;
+        break;
+    }
+    case APP_GLM_FETCH: txt = "..."; col = UI_INK; break;
+    case APP_GLM_NOKEY: txt = "NO KEY"; col = UI_WARN; break;
+    case APP_GLM_ERR:
+        if (g->http_err == 401) { txt = "KEY ERR"; col = UI_RED; }
+        else if (g->http_err > 0) { snprintf(tbuf, sizeof tbuf, "HTTP %d", g->http_err); txt = tbuf; col = UI_WARN; }
+        else { txt = "NO RESP"; col = UI_WARN; }
+        break;
+    default: break;
+    }
+    if (g->state == APP_GLM_WAIT && w->state != APP_WIFI_ONLINE) txt = "NO NET";
+    lv_label_set_text(l_glm, txt);
+    lv_obj_set_style_text_color(l_glm, lv_color_hex(col), 0);
+
+    win_refresh(g, true, l_5h, l_r5);
+    win_refresh(g, false, l_wk, l_rw);
 }
 
 // 主屏常驻(仅构建一次), 本定时器与状态栏定时器同寿命, 无需清理
@@ -115,6 +186,7 @@ static void timer_cb(lv_timer_t *t) {
 
     // -- 在线区 --
     net_refresh(w);
+    glm_refresh(w);
     if (w->time_valid) {
         time_t now = time(NULL);
         struct tm tm;
@@ -133,26 +205,23 @@ static void timer_cb(lv_timer_t *t) {
     }
 
     if (s->soc >= 0) {
-        if (s->mv > 0)
+        // 满电 100% 再带电压会 9 字符溢出值列, 只显示百分比
+        if (s->mv > 0 && s->soc < 100)
             lv_label_set_text_fmt(l_batt, "%d%%%d.%02dV", s->soc, s->mv / 1000, (s->mv % 1000) / 10);
         else
             lv_label_set_text_fmt(l_batt, "%d%%", s->soc);
-        lv_bar_set_value(bar_batt, s->soc, LV_ANIM_OFF);
     } else {
         lv_label_set_text(l_batt, "N/A");
-        lv_bar_set_value(bar_batt, 0, LV_ANIM_OFF);
     }
 
     size_t tot = heap_caps_get_total_size(MALLOC_CAP_DEFAULT);
     if (!tot) tot = 400 * 1024;                // 兜底: 同 SYSTEM 页的 C3 DRAM 近似值
     lv_label_set_text_fmt(l_heap, "%d/%dK", (int)(s->heap_free / 1024), (int)(tot / 1024));
-    lv_bar_set_value(bar_heap, (int32_t)(s->heap_free * 100 / tot), LV_ANIM_OFF);
 }
 
 static void build(void) {
     s_scr = ui_screen_create("PASSPORT");
-    lv_obj_t *cont = ui_content_get(s_scr);
-    ui_grid_bg_install(s_scr);                 // 底部留白的终端网格(同菜单屏)
+    lv_obj_t *cont = ui_content_get(s_scr);    // 内容区 216x250, 以下均为容器局部坐标
 
     // wifi 点阵: 只建轮廓上的点(档位配色由 net_refresh 统一上)
     enum { NET_X = 206, NET_Y = 12, NET_PX = 3 };
@@ -175,40 +244,47 @@ static void build(void) {
     ui_hline_make(cont, 2, 20, 212, UI_DARK);
     l_time = kv_make(cont, "TIME", "--:--:--", 27, UI_DIM);
 
-    // -- 离线区: kv 网格 + 用量条 --
+    // -- 离线区: 纯 kv 行(电量/内存/Flash 无用量条, 竖向空间让给 GLM 区) --
     l_temp = kv_make(cont, "TEMP", "", 45, UI_ACC);
     l_batt = kv_make(cont, "BATT", "", 63, UI_ACC);
-    bar_batt = bar_make(cont, 81);
-
-    l_heap = kv_make(cont, "HEAP", "", 99, UI_INK2);
-    bar_heap = bar_make(cont, 117);
+    l_heap = kv_make(cont, "HEAP", "", 81, UI_INK2);
 
     // Flash: APP 镜像长/分区大小(静态, 无需定时器)
     const esp_partition_t *app =
         esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, NULL);
     uint32_t ilen = app ? app_image_len(app) : 0;
-    lv_obj_t *l_flash = kv_make(cont, "FLASH", "", 135, UI_INK2);
+    lv_obj_t *l_flash = kv_make(cont, "FLASH", "", 99, UI_INK2);
     if (app && ilen && ilen <= app->size) {
         lv_label_set_text_fmt(l_flash, "%dK/%dM",
                               (int)((ilen + 1023) / 1024),
                               (int)((app->size + 524288) / 1048576));   // MB 四舍五入
-        bar_flash = bar_make(cont, 153);
-        lv_bar_set_value(bar_flash, (int32_t)(ilen * 100 / app->size), LV_ANIM_OFF);
     } else {
         lv_label_set_text(l_flash, "N/A");
-        bar_flash = bar_make(cont, 153);
     }
 
-    ui_hline_make(cont, 2, 171, 212, UI_DARK);
+    ui_hline_make(cont, 2, 117, 212, UI_DARK);
+
+    // -- GLM 用量区: 每窗两行(已用/总额 + 百分比&重置), 值列左移 G_X 宽 10ch --
+    l_glm = kv_row(cont, "GLM", K_X, "WAIT", G_X, 125, UI_DIM);
+    l_5h  = kv_row(cont, "5H",  K_X, "N/A",  G_X, 143, UI_DIM);
+    l_r5  = ui_label_make(cont, "-");          // 子行无键, 与值列对齐缩进
+    lv_obj_set_style_text_color(l_r5, lv_color_hex(UI_DIM), 0);
+    lv_obj_set_pos(l_r5, G_X, 161);
+    l_wk  = kv_row(cont, "WK",  K_X, "N/A",  G_X, 179, UI_DIM);
+    l_rw  = ui_label_make(cont, "-");
+    lv_obj_set_style_text_color(l_rw, lv_color_hex(UI_DIM), 0);
+    lv_obj_set_pos(l_rw, G_X, 197);
+
+    ui_hline_make(cont, 2, 215, 212, UI_DARK);
 
     // 导航提示: 闪烁 ">" 终端待输入暗示(同状态栏光标节奏)
     lv_obj_t *prompt = ui_label_make(cont, ">");
     lv_obj_set_style_text_color(prompt, lv_color_hex(UI_INK), 0);
-    lv_obj_set_pos(prompt, 2, 179);
+    lv_obj_set_pos(prompt, 2, 223);
     ui_anim_blink_start(prompt, 530);
     lv_obj_t *hint = ui_label_make(cont, "OK:MENU");
     lv_obj_set_style_text_color(hint, lv_color_hex(UI_DARK), 0);
-    lv_obj_set_pos(hint, 20, 179);
+    lv_obj_set_pos(hint, 20, 223);
 
     timer_cb(NULL);
     s_timer = lv_timer_create(timer_cb, 1000, NULL);

@@ -6,6 +6,7 @@
 #include "app_audio.h"
 #include "app_sensors.h"
 #include "app_wifi.h"
+#include "app_glm.h"
 
 #include "nvs_flash.h"
 #include "esp_log.h"
@@ -70,6 +71,7 @@ void app_main(void) {
     app_audio_start();
     app_sensors_start();
     app_wifi_start();          // 在线服务: 周期扫描目标 AP + NTP 上海时间
+    app_glm_start();           // GLM 套餐用量: 联网后 5min 查额度(依赖 wifi/NTP 就绪)
 
     if (bsp_lvgl_lock(1000)) {
         ui_boot_play(boot_done);

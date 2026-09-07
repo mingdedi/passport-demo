@@ -40,6 +40,8 @@ main/
   app_sensors.c        1s 周期采样服务（电池/温度/heap），快照只读供 UI 轮询
   app_wifi.c           WiFi 在线服务：5min 周期扫描目标 AP 自动连接 + NTP 上海时间
   wifi_secrets.h       WiFi 凭据（**git 不追踪**，模板 wifi_secrets.h.example；CMake 缺文件报错）
+  app_glm.c            GLM 套餐用量服务：联网后 5min 查智谱额度接口，5h/周窗快照供主界面轮询
+  glm_secrets.h        智谱 API Key（**git 不追踪**，模板 glm_secrets.h.example；CMake 缺文件报错）
   app_audio.c          ES8311 播放/录音/VU 单任务引擎
   app_ble.c            NimBLE 可连接广播
 managed_components/    组件管理器拉取，勿手改（.gitignore 已排除）
@@ -66,7 +68,7 @@ partitions.csv         nvs 24K + phy 4K + factory 3MB（勿删，默认 1MB 装�
 8. **新增页面**：写 `main/page_xxx.c` → `main/CMakeLists.txt` SRCS 加文件 → `main.c` 声明 extern 并加入 `UI_PAGES[]` → `ui.h` 的 `UI_PAGE_COUNT` +1。页面 ID ≤7 字符（菜单行格式 `NN NAME  ICON` 共 13 列）。
 9. **硬件参数只改 `bsp_pins.h`**（含 ADC 按键电压窗口；改分压电阻后用 INPUT 页实测 mV 再改表）。
 10. IDF 5.5 API 注意：`esp_app_desc.h`（main 需 REQUIRES `esp_app_format`）、`ESP_MAC_BASE`、`spi_flash_mmap`（`spi_flash_read` 已废弃）、NimBLE `adv_fields.flags` 是值不是指针。
-11. **凭据卫生（开源项目）**：WiFi SSID/密码只准出现在 `main/wifi_secrets.h`（已被 .gitignore 排除，模板 `wifi_secrets.h.example` 入库）；被追踪的代码/文档/提交信息里不得出现真实凭据。改凭据只改该文件后重编译。
+11. **凭据卫生（开源项目）**：WiFi SSID/密码只准出现在 `main/wifi_secrets.h`，GLM API Key 只准出现在 `main/glm_secrets.h`（均已被 .gitignore 排除，模板 `*.example` 入库）；被追踪的代码/文档/提交信息里不得出现真实凭据。改凭据只改对应文件后重编译。
 
 ## 风格与提交约定
 
