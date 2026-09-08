@@ -189,7 +189,14 @@ esp_err_t app_ble_host_init(void) {
 
     // HID GATT 表必须在 host sync 完成前注册
     rc = app_ble_hid_register();
-    if (rc != ESP_OK) { app_wifi_resume(); return ESP_FAIL; }
+    if (rc != ESP_OK) {
+        // 回滚已成功的 nimble_port_init(host 任务尚未创建, 可直接 deinit):
+        // 否则 controller+host ~70K 滞留, 且下次进页对已初始化 port 重复
+        // init 属未定义行为, BLE 永久失效直至重启
+        nimble_port_deinit();
+        app_wifi_resume();
+        return ESP_FAIL;
+    }
 
     nimble_port_freertos_init(host_task);
     s_inited = true;
