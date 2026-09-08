@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "app_ble_hid";
 
@@ -116,6 +117,9 @@ static const char *s_type_text;                // type() 设好后才 notify, �
 static bool s_type_enter;
 static volatile bool s_typing;
 static volatile int s_typed;
+// 任务退出握手: shutdown 置 s_type_quit 并唤醒任务, 任务自删前 give 信号量
+static volatile bool s_type_quit;
+static SemaphoreHandle_t s_type_done;          // 一次性创建, 随 init 循环复用
 
 static uint8_t batt_level(void) {
     int soc = app_sensors_snap()->soc;
@@ -294,6 +298,7 @@ static void type_task_fn(void *arg) {
     (void)arg;
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (s_type_quit) break;                                 // shutdown 唤醒: 安全点退出
         const char *p = s_type_text;
         while (s_typing && *p) {
             uint16_t kc = 0;
@@ -316,6 +321,8 @@ static void type_task_fn(void *arg) {
         }
         s_typing = false;
     }
+    xSemaphoreGive(s_type_done);                // 告知 shutdown 等待者, 再无 host 调用
+    vTaskDelete(NULL);                          // 自删(TCB/栈由 idle 任务回收)
 }
 
 // ---------------------------------------------------------------------------
@@ -417,11 +424,22 @@ esp_err_t app_ble_hid_register(void) {
         ESP_LOGE(TAG, "gatt register rc=%d", rc);
         return ESP_FAIL;
     }
+    if (!s_type_done) s_type_done = xSemaphoreCreateBinary();
+    s_type_quit = false;                       // 新任务生命周期开始, 复位退出标志
     if (xTaskCreate(type_task_fn, "hidtype", 3072, NULL, 4, &s_type_task) != pdPASS) {
         ESP_LOGE(TAG, "hidtype task create failed");
         return ESP_FAIL;
     }
     return ESP_OK;
+}
+
+void app_ble_hid_task_stop(void) {
+    if (!s_type_task) return;
+    s_type_quit = true;
+    xTaskNotify(s_type_task, 0, eIncrement);    // 唤醒挂在 ulTaskNotifyTake 的任务
+    if (xSemaphoreTake(s_type_done, pdMS_TO_TICKS(1000)) != pdTRUE)
+        ESP_LOGW(TAG, "hidtype 1s 内未退出, 继续拆 host");
+    s_type_task = NULL;                         // 句柄交还, register 下圈重建
 }
 
 kkey_state_t app_ble_hid_state(void)  { return s_state; }

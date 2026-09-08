@@ -29,3 +29,4 @@ esp_err_t app_ble_hid_register(void);          // 注册 HID GATT 表(须在 hos
 int  app_ble_hid_on_gap(struct ble_gap_event *ev);   // GAP 事件转发; 非 0=事件已裁决
 void app_ble_hid_session_reset(void);          // 键盘广播停止时清状态
 void app_ble_hid_disconnect(void);             // 断开当前 HID 连接(退页即离线)
+void app_ble_hid_task_stop(void);              // 删除 hidtype 任务(shutdown 时, 先于 host 停止)

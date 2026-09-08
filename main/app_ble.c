@@ -210,6 +210,7 @@ void app_ble_shutdown(void) {
     s_mode = APP_BLE_ADV_OFF;
     if (ble_gap_adv_active()) ble_gap_adv_stop();
     app_ble_hid_disconnect();                 // 幂等: 无连接时 no-op
+    app_ble_hid_task_stop();                  // 删 hidtype 任务(它调 host API, 须先于 host 停止)
     if (s_update_timer) {
         esp_timer_stop(s_update_timer);
         esp_timer_delete(s_update_timer);
