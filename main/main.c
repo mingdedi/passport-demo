@@ -7,6 +7,7 @@
 #include "app_sensors.h"
 #include "app_wifi.h"
 #include "app_glm.h"
+#include "app_power.h"
 
 #include "nvs_flash.h"
 #include "esp_log.h"
@@ -37,6 +38,9 @@ static void boot_done(void) {
 
 static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user) {
     (void)user;
+    // 熄屏唤醒键在最前端消费掉(背光走 LEDC 不需要 LVGL 锁), 不透传 UI
+    if (app_power_key_event()) return;
+
     if (!bsp_lvgl_lock(500)) return;
 
     if (ui_boot_active()) {
@@ -70,6 +74,7 @@ void app_main(void) {
     bsp_button_init(on_key, NULL);
     app_audio_start();
     app_sensors_start();
+    app_power_start();        // 电源模式推断 + 熄屏管理(依赖 CW2017 已初始化)
     app_wifi_start();          // 在线服务: 周期扫描目标 AP + NTP 上海时间
     app_glm_start();           // GLM 套餐用量: 联网后 5min 查额度(依赖 wifi/NTP 就绪)
 

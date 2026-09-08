@@ -25,6 +25,7 @@ idf_component_register(
          "page_about.c"
          "page_matrix.c"
          "app_sensors.c"
+         "app_power.c"
          "app_wifi.c"
          "app_glm.c"
          "app_audio.c"

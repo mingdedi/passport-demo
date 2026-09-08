@@ -9,6 +9,7 @@
 #include "app_sensors.h"
 #include "app_wifi.h"
 #include "app_glm.h"
+#include "app_power.h"
 
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
@@ -201,6 +202,8 @@ static void glm_refresh(const app_wifi_snap_t *w) {
 // 主屏常驻(仅构建一次), 本定时器与状态栏定时器同寿命, 无需清理
 static void timer_cb(lv_timer_t *t) {
     (void)t;
+    // 熄屏期跳过重绘: 背光已灭, label 更新只会白耗 SPI 传输
+    if (app_power_screen_off()) return;
     const app_sensors_snap_t *s = app_sensors_snap();
     const app_wifi_snap_t *w = app_wifi_snap();
 
@@ -225,11 +228,15 @@ static void timer_cb(lv_timer_t *t) {
     }
 
     if (s->soc >= 0) {
-        // 满电 100% 再带电压会 9 字符溢出值列, 只显示百分比
-        if (s->mv > 0 && s->soc < 100)
+        // 充电态以 CHG 前缀标识("CHG 98%"=7ch 在值列 8ch 内), 电压让位
+        if (app_power_snap()->state == APP_PWR_CHARGING) {
+            lv_label_set_text_fmt(l_batt, "CHG %d%%", s->soc);
+        } else if (s->mv > 0 && s->soc < 100) {
+            // 满电 100% 再带电压会 9 字符溢出值列, 只显示百分比
             lv_label_set_text_fmt(l_batt, "%d%%%d.%02dV", s->soc, s->mv / 1000, (s->mv % 1000) / 10);
-        else
+        } else {
             lv_label_set_text_fmt(l_batt, "%d%%", s->soc);
+        }
     } else {
         lv_label_set_text(l_batt, "N/A");
     }
