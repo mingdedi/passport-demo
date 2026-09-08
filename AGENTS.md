@@ -18,6 +18,7 @@ idf.py -p /dev/ttyACM0 flash                        # 设备为原生 USB-Serial
 idf.py set-target esp32c3
 ```
 
+- **`git pull` 后先查 `sdkconfig.defaults` 是否变化**：变了必须 `rm sdkconfig` 再 build（旧缓存不会自动更新，见修改守则 7；跨机器同步开发时尤其注意——曾因 `SNTP_MAX_SERVERS` 残留旧值导致 NTP/GLM 静默失效）。
 - **无自动化测试**。验证方式 = `idf.py build` 编译通过 + 烧录后人工看屏。改完代码至少跑 build。
 - 烧录报 port busy：设备深睡了（USB CDC 掉线），按键唤醒或重插。
 - 本固件不读串口 RX：脚本长时间只写不读会塞满设备 FIFO 使 `write()` 挂起，是预期背压不是故障。
