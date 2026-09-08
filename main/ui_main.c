@@ -319,6 +319,9 @@ void ui_main_show(void) {
 }
 
 void ui_main_key(bsp_btn_t btn, bsp_btn_ev_t ev) {
+    // 开机窗口(bsp_button_init 后~1-2s, boot 动画前): 主界面尚未构建,
+    // 若路由进菜单/页面会对全 NULL 的 s_rows[] 调 LVGL 接口直接 panic
+    if (!s_scr) return;
     // 非主界面(菜单/页面态)全部交给菜单导航
     if (lv_screen_active() != s_scr) {
         ui_home_key(btn, ev);
