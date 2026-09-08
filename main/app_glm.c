@@ -1,9 +1,12 @@
-// main/app_glm.c -- GLM 套餐用量服务(独立任务, 不碰 UI, 快照只读供 ui_main 轮询)。
+// main/app_glm.c -- GLM 套餐用量服务(esp_timer 调度 + 一次性查询任务)。
 // 联网且 NTP 已同步后, 每 5min 查询智谱额度监控接口(与 shell 状态栏脚本同源):
 //   GET https://open.bigmodel.cn/api/monitor/usage/quota/limit
 //   Authorization 头直接放 API Key(无 Bearer 前缀); data.limits[] 数组里
 //   number==5 为 5 小时窗, unit==6 && number==1 为周窗(字段含义见下方解析处)。
 // 等 NTP 是因为 TLS 证书校验依赖系统时间, 未同步就握手必失败。
+// 按需内存模型(2026-09-08): 查询任务按次创建、查完自删, 8K 栈 + TLS 峰值
+// (~40K)只在查询窗口存在; 常驻任务会占住 8K, 令 BLE(需 ~70K)进页时起不来。
+// BLE 页活跃期间查询失败置 ERR(LOW MEM), 退页后下个调度点自动恢复。
 // 凭据来自 glm_secrets.h(git 不追踪, 模板见 glm_secrets.h.example)。
 #include "app_glm.h"
 #include "app_wifi.h"
@@ -11,6 +14,8 @@
 
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "esp_system.h"
+#include "esp_timer.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -21,12 +26,15 @@
 static const char *TAG = "glm";
 
 #define GLM_URL        "https://open.bigmodel.cn/api/monitor/usage/quota/limit"
-#define GLM_PERIOD_S   300    // 刷新周期(5min), 与 wifi 扫描节奏一致
-#define GLM_POLL_S     5      // 在线检测轮询粒度(联网成功后最长延迟一个周期)
+#define GLM_PERIOD_S   300    // 查询周期(5min)
+#define GLM_TICK_S     30     // 调度粒度: 就绪后最长一个 tick 触发(首查/重试)
 #define GLM_TIMEOUT_MS 8000   // 单次请求超时(shell 版 3s, 设备 TLS 握手放宽)
 
 static app_glm_snap_t s_snap;
-static TaskHandle_t s_task;       // 立即刷新通知用; NOKEY 自删后置空防悬空句柄
+static esp_timer_handle_t s_timer;
+static volatile bool s_querying;          // 查询任务存活(防重入)
+static volatile bool s_force;             // 双击 OK 的立即查请求(可跨 tick 存活)
+static time_t s_last_try;
 
 // 占位/空 Key 视为未配置, 不发请求(UI 显示 NO KEY, 免无效流量)
 static bool key_ok(void) {
@@ -107,62 +115,82 @@ static bool glm_parse(const char *body) {
     return got5 || gotw;
 }
 
-static void glm_task(void *arg) {
+// 一次性查询任务: 查完自删, 内存峰值只在任务存活期出现
+static void glm_query_task(void *arg) {
     (void)arg;
-    if (!key_ok()) {
-        s_snap.state = APP_GLM_NOKEY;
-        ESP_LOGW(TAG, "GLM_API_KEY 未配置, 用量区显示 NO KEY");
-        s_task = NULL;
-        vTaskDelete(NULL);
-        return;
-    }
-
-    time_t last_try = 0;
-    for (;;) {
-        // 等轮询节拍或立即刷新通知(双击 OK), 任一先到即醒
-        bool force = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(GLM_POLL_S * 1000)) > 0;
-        const app_wifi_snap_t *w = app_wifi_snap();
-        time_t now = time(NULL);
-        if (w->state == APP_WIFI_ONLINE && w->time_valid &&
-            (force || now - last_try >= GLM_PERIOD_S)) {   // last_try=0 首查立即; 失败按周期退避
-            last_try = now;
-            s_snap.state = APP_GLM_FETCH;
-            char *buf = malloc(2048);
-            if (buf) {
-                int status = 0;
-                int n = glm_fetch(buf, 2048, &status);
-                if (n < 0) {
-                    s_snap.state = APP_GLM_ERR; s_snap.http_err = n;
-                    ESP_LOGW(TAG, "请求失败 err=%d", n);
-                } else if (status != 200) {
-                    s_snap.state = APP_GLM_ERR; s_snap.http_err = status;
-                    ESP_LOGW(TAG, "HTTP %d: %.120s", status, buf);
-                } else if (!glm_parse(buf)) {
-                    s_snap.state = APP_GLM_ERR; s_snap.http_err = -10;
-                    ESP_LOGW(TAG, "响应无可用量窗口数据");
-                } else {
-                    s_snap.state = APP_GLM_OK; s_snap.http_err = 0;
-                    s_snap.fetched_at = time(NULL);
-                    ESP_LOGI(TAG, "5h %lld/%lld(%d%%) 周 %lld/%lld(%d%%)",
-                             (long long)s_snap.used5, (long long)s_snap.total5, s_snap.pct5,
-                             (long long)s_snap.usedw, (long long)s_snap.totalw, s_snap.pctw);
-                }
-                free(buf);
-            }
+    char *buf = malloc(2048);
+    if (!buf) {                                // BLE 页活跃挤占时的典型失败
+        s_snap.state = APP_GLM_ERR; s_snap.http_err = -21;
+        ESP_LOGW(TAG, "响应缓冲分配失败 free=%u", (unsigned)esp_get_free_heap_size());
+    } else {
+        int status = 0;
+        int n = glm_fetch(buf, 2048, &status);
+        if (n < 0) {
+            s_snap.state = APP_GLM_ERR; s_snap.http_err = n;
+            ESP_LOGW(TAG, "请求失败 err=%d", n);
+        } else if (status != 200) {
+            s_snap.state = APP_GLM_ERR; s_snap.http_err = status;
+            ESP_LOGW(TAG, "HTTP %d: %.120s", status, buf);
+        } else if (!glm_parse(buf)) {
+            s_snap.state = APP_GLM_ERR; s_snap.http_err = -10;
+            ESP_LOGW(TAG, "响应无可用量窗口数据");
+        } else {
+            s_snap.state = APP_GLM_OK; s_snap.http_err = 0;
+            s_snap.fetched_at = time(NULL);
+            ESP_LOGI(TAG, "5h %lld/%lld(%d%%) 周 %lld/%lld(%d%%)",
+                     (long long)s_snap.used5, (long long)s_snap.total5, s_snap.pct5,
+                     (long long)s_snap.usedw, (long long)s_snap.totalw, s_snap.pctw);
         }
+        free(buf);
     }
+    s_querying = false;
+    vTaskDelete(NULL);
+}
+
+// 调度入口(timer tick / 立即刷新共用): 未就绪静默等下个 tick, 就绪且过了
+// 节流窗(或 force)才起任务。tick 上下文(esp_timer 栈小)只做判断+建任务。
+static void schedule_query(bool force) {
+    if (s_querying) return;
+    const app_wifi_snap_t *w = app_wifi_snap();
+    if (w->state != APP_WIFI_ONLINE || !w->time_valid) return;
+    time_t now = time(NULL);
+    if (!force && now - s_last_try < GLM_PERIOD_S) return;
+    s_last_try = now;
+    s_snap.state = APP_GLM_FETCH;
+    s_querying = true;
+    if (xTaskCreate(glm_query_task, "glm", 8192, NULL, 4, NULL) != pdPASS) {
+        s_querying = false;
+        s_snap.state = APP_GLM_ERR; s_snap.http_err = -20;
+        ESP_LOGE(TAG, "查询任务创建失败 free=%u", (unsigned)esp_get_free_heap_size());
+    }
+}
+
+static void timer_cb(void *arg) {
+    (void)arg;
+    bool force = s_force;
+    s_force = false;
+    schedule_query(force);
 }
 
 void app_glm_start(void) {
     memset(&s_snap, 0, sizeof(s_snap));
+    if (!key_ok()) {
+        s_snap.state = APP_GLM_NOKEY;
+        ESP_LOGW(TAG, "GLM_API_KEY 未配置, 用量区显示 NO KEY");
+        return;
+    }
     s_snap.state = APP_GLM_WAIT;
-    // 8K 栈覆盖 TLS 握手 + cJSON; 任务常驻但绝大多数时间在等通知/节拍
-    xTaskCreate(glm_task, "glm", 8192, NULL, 4, &s_task);
+    const esp_timer_create_args_t args = {
+        .name = "glm_sched", .callback = timer_cb,
+    };
+    esp_timer_create(&args, &s_timer);
+    esp_timer_start_periodic(s_timer, GLM_TICK_S * 1000000ULL);
 }
 
 void app_glm_refresh_now(void) {
-    // 置值 1: 任务侧 ulTaskNotifyTake 以返回值>0 识别通知, eNoAction 不改值会与超时混淆
-    if (s_task) xTaskNotify(s_task, 1, eSetValueWithoutOverwrite);
+    // 立即尝试一次; 若恰未就绪(离线/时间未同步), s_force 留给下个 tick 兜底
+    s_force = true;
+    schedule_query(true);
 }
 
 const app_glm_snap_t *app_glm_snap(void) { return &s_snap; }

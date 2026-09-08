@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-FoloToy AI Passport（ESP32-C3，8MB flash，无 PSRAM，240x320 圆角屏）的全功能演示固件：LVGL 9 黑绿终端风 UI，9 个交互页面覆盖全部板载外设。**目标芯片固定 esp32c3，工具链固定 ESP-IDF v5.5.x（实测 v5.5.5）**。
+FoloToy AI Passport（ESP32-C3，8MB flash，无 PSRAM，240x320 圆角屏）的全功能演示固件：LVGL 9 黑绿终端风 UI，10 个交互页面覆盖全部板载外设，含 BLE HID 键盘（密码物理密钥）。**目标芯片固定 esp32c3，工具链固定 ESP-IDF v5.5.x（实测 v5.5.5）**。
 
 ## 构建与烧录
 
@@ -37,14 +37,17 @@ main/
   ui_home.c            菜单屏 + 页面导航/转场/按键分发（菜单态 OK 长按回主界面）
   ui_boot.c            开机动画
   ui_anim.c            动效工具（滑入/淡入/闪烁/打字机）
-  page_*.c             9 个演示页，一页一文件
+  page_*.c             10 个演示页，一页一文件
   app_sensors.c        1s 周期采样服务（电池/温度/heap），快照只读供 UI 轮询
   app_wifi.c           WiFi 在线服务：5min 周期扫描目标 AP 自动连接 + NTP 上海时间
   wifi_secrets.h       WiFi 凭据（**git 不追踪**，模板 wifi_secrets.h.example；CMake 缺文件报错）
   app_glm.c            GLM 套餐用量服务：联网后 5min 查智谱额度接口，5h/周窗快照供主界面轮询
   glm_secrets.h        智谱 API Key（**git 不追踪**，模板 glm_secrets.h.example；CMake 缺文件报错）
   app_audio.c          ES8311 播放/录音/VU 单任务引擎
-  app_ble.c            NimBLE 可连接广播
+  app_ble.c            NimBLE host 生命周期 + 广播模式互斥(RADIO 演示广播 / HID 键盘广播)
+  app_ble_hid.c        BLE HID 键盘(HOGP)：GATT 服务表 + Passkey 配对 + 密码键入任务
+  keys_secrets.h       BLE 密钥账户表（**git 不追踪**，模板 keys_secrets.h.example；CMake 缺文件报错）
+  page_keys.c          KEYS 页：账户列表(长名循环滚动)/二次确认/触发 BLE 键入
 managed_components/    组件管理器拉取，勿手改（.gitignore 已排除）
 partitions.csv         nvs 24K + phy 4K + factory 3MB（勿删，默认 1MB 装不下 ~1MB 镜像）
 ```
@@ -55,6 +58,7 @@ partitions.csv         nvs 24K + phy 4K + factory 3MB（勿删，默认 1MB 装�
 - **按键路由**：`bsp_button` 回调（button 组件定时器任务上下文）→ `main.c:on_key()` **先拿 LVGL 锁** → `ui_main_key()`（主界面态就地处理，其余转 `ui_home_key()`）→ 菜单态处理或分发到当前页 `key()`。页面内 OK 长按返回菜单、菜单态 OK 长按回主界面，均由 `ui_home_key` 统一处理。
 - **页面模型**：`ui_page_t { id, enter, exit, key }`（ui.h）。`enter(root)` 构建页面（root 是内容容器，坐标相对容器）；`exit()` 清理页面私有资源（删自建 lv_timer 等）；`key()` 收按键事件。
 - **线程/LVGL 锁模型**：页面 `enter/key/exit` 与 lv_timer 回调都已在 LVGL 上下文内，可直接调 LVGL API；**只有从其他任务碰 UI 才需要 `bsp_lvgl_lock()`**。服务模块（app_sensors 等）从不直接碰 UI，页面用 `lv_timer` 轮询快照（`app_sensors_snap()` 返回只读指针）。
+- **BLE**：开机 `app_ble_host_init()` 常驻初始化 NimBLE host（含 HID GATT 表注册），不广播；广播按模式互斥启动（RADIO 演示格式 / HID 键盘格式，进对应页面才开）。GAP 事件统一进 `app_ble.c` 后转发 `app_ble_hid` 处理；HID 连接/配对/键入状态只经快照函数暴露，host 回调从不直接碰 UI。
 - **按键枚举即下标**：`bsp_btn_t` 为 UP=0, DOWN=1, OK=2，页面里直接当数组索引用。
 
 ## 修改守则（硬约束，均来自实机踩坑）
@@ -69,7 +73,7 @@ partitions.csv         nvs 24K + phy 4K + factory 3MB（勿删，默认 1MB 装�
 8. **新增页面**：写 `main/page_xxx.c` → `main/CMakeLists.txt` SRCS 加文件 → `main.c` 声明 extern 并加入 `UI_PAGES[]` → `ui.h` 的 `UI_PAGE_COUNT` +1。页面 ID ≤7 字符（菜单行格式 `NN NAME  ICON` 共 13 列）。
 9. **硬件参数只改 `bsp_pins.h`**（含 ADC 按键电压窗口；改分压电阻后用 INPUT 页实测 mV 再改表）。
 10. IDF 5.5 API 注意：`esp_app_desc.h`（main 需 REQUIRES `esp_app_format`）、`ESP_MAC_BASE`、`spi_flash_mmap`（`spi_flash_read` 已废弃）、NimBLE `adv_fields.flags` 是值不是指针。
-11. **凭据卫生（开源项目）**：WiFi SSID/密码只准出现在 `main/wifi_secrets.h`，GLM API Key 只准出现在 `main/glm_secrets.h`（均已被 .gitignore 排除，模板 `*.example` 入库）；被追踪的代码/文档/提交信息里不得出现真实凭据。改凭据只改对应文件后重编译。
+11. **凭据卫生（开源项目）**：WiFi SSID/密码只准出现在 `main/wifi_secrets.h`，GLM API Key 只准出现在 `main/glm_secrets.h`，BLE 密钥账户/密码只准出现在 `main/keys_secrets.h`（均已被 .gitignore 排除，模板 `*.example` 入库）；被追踪的代码/文档/提交信息里不得出现真实凭据。改凭据只改对应文件后重编译。
 
 ## 风格与提交约定
 

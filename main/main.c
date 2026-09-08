@@ -12,6 +12,7 @@
 #include "nvs_flash.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "esp_system.h"
 
 static const char *TAG = "main";
 
@@ -22,14 +23,15 @@ extern const ui_page_t page_audio;
 extern const ui_page_t page_battery;
 extern const ui_page_t page_input;
 extern const ui_page_t page_radio;
+extern const ui_page_t page_keys;
 extern const ui_page_t page_storage;
 extern const ui_page_t page_about;
 extern const ui_page_t page_matrix;
 
 const ui_page_t *const UI_PAGES[] = {
     &page_sysinfo, &page_display, &page_audio, &page_battery,
-    &page_input,   &page_radio,  &page_storage, &page_about,
-    &page_matrix,
+    &page_input,   &page_radio,  &page_keys,  &page_storage,
+    &page_about,   &page_matrix,
 };
 
 static void boot_done(void) {
@@ -73,10 +75,16 @@ void app_main(void) {
 
     bsp_button_init(on_key, NULL);
     app_audio_start();
+    ESP_LOGI(TAG, "heap post-audio %u", (unsigned)esp_get_free_heap_size());
     app_sensors_start();
     app_power_start();        // 电源模式推断 + 熄屏管理(依赖 CW2017 已初始化)
     app_wifi_start();          // 在线服务: 周期扫描目标 AP + NTP 上海时间
+    ESP_LOGI(TAG, "heap post-wifi %u", (unsigned)esp_get_free_heap_size());
+    // BLE 不常驻: controller+host 约 70K, 开机即起会挤死 GLM 的 TLS 请求
+    // (实测 2026-09-08 剩 3.1K, glm 任务创建失败)。改为进 RADIO/KEYS 页
+    // 才 init, 退页 shutdown 全量释放(app_ble.c 管理生命周期)。
     app_glm_start();           // GLM 套餐用量: 联网后 5min 查额度(依赖 wifi/NTP 就绪)
+    ESP_LOGI(TAG, "heap post-glm %u", (unsigned)esp_get_free_heap_size());
 
     if (bsp_lvgl_lock(1000)) {
         ui_boot_play(boot_done);

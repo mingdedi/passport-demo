@@ -8,6 +8,11 @@ if(NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/glm_secrets.h)
     message(FATAL_ERROR "缺少 main/glm_secrets.h: 复制 glm_secrets.h.example 为 glm_secrets.h 并填入智谱 API Key(该文件已被 .gitignore 排除)")
 endif()
 
+# BLE 密钥账户表同理: keys_secrets.h 保持占位也可编译(KEYS 页显示占位账户)
+if(NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/keys_secrets.h)
+    message(FATAL_ERROR "缺少 main/keys_secrets.h: 复制 keys_secrets.h.example 为 keys_secrets.h 并填入账户(该文件已被 .gitignore 排除)")
+endif()
+
 idf_component_register(
     SRCS "main.c"
          "ui_theme.c"
@@ -21,6 +26,7 @@ idf_component_register(
          "page_battery.c"
          "page_input.c"
          "page_radio.c"
+         "page_keys.c"
          "page_storage.c"
          "page_about.c"
          "page_matrix.c"
@@ -30,6 +36,7 @@ idf_component_register(
          "app_glm.c"
          "app_audio.c"
          "app_ble.c"
+         "app_ble_hid.c"
     INCLUDE_DIRS "."
     REQUIRES bsp bt nvs_flash esp_driver_tsens spi_flash esp_app_format esp_partition esp_wifi esp_netif esp_http_client mbedtls json
 )

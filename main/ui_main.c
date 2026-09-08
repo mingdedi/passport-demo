@@ -186,6 +186,7 @@ static void glm_refresh(const app_wifi_snap_t *w) {
     case APP_GLM_NOKEY: txt = "NO KEY"; col = UI_WARN; break;
     case APP_GLM_ERR:
         if (g->http_err == 401) { txt = "KEY ERR"; col = UI_RED; }
+        else if (g->http_err == -20 || g->http_err == -21) { txt = "LOW MEM"; col = UI_WARN; }
         else if (g->http_err > 0) { snprintf(tbuf, sizeof tbuf, "HTTP %d", g->http_err); txt = tbuf; col = UI_WARN; }
         else { txt = "NO RESP"; col = UI_WARN; }
         break;

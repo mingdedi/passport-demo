@@ -40,7 +40,7 @@ typedef struct {
 } ui_page_t;
 
 extern const ui_page_t *const UI_PAGES[];
-#define UI_PAGE_COUNT 9      // 与 main.c 中 UI_PAGES[] 一致
+#define UI_PAGE_COUNT 10     // 与 main.c 中 UI_PAGES[] 一致
 
 // ---- ui_boot ----
 void ui_boot_play(void (*on_done)(void));

@@ -19,4 +19,6 @@ typedef struct {
 
 void app_wifi_start(void);
 void app_wifi_resync(void);            // 立即刷新: 离线重扫 / 在线重启 NTP 对时
+void app_wifi_pause(void);             // BLE 页进入: 停射频(WiFi 连接态会饿死 BLE controller sync)
+void app_wifi_resume(void);            // BLE 页退出: 重启 WiFi, 自动重扫重连
 const app_wifi_snap_t *app_wifi_snap(void);

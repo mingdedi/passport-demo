@@ -23,3 +23,6 @@ main/wifi_secrets.h
 
 # 智谱 GLM API Key(本地私有, 模板见 glm_secrets.h.example; CMake 缺文件会直接报错)
 main/glm_secrets.h
+
+# BLE 密钥账户表(本地私有, 模板见 keys_secrets.h.example; CMake 缺文件会直接报错)
+main/keys_secrets.h

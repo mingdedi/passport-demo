@@ -24,6 +24,7 @@ static app_wifi_snap_t s_snap;
 static esp_timer_handle_t s_scan_timer;
 static int s_join_retries;
 static bool s_sntp_started;
+static bool s_paused;                   // BLE 页期间射频互斥, 停重连/停扫描
 static uint8_t s_filter[33];    // 扫描 SSID 过滤缓冲(扫描期间驱动持有指针, 故用静态)
 
 static void scan_start(void) {
@@ -77,7 +78,9 @@ static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *da
             s_snap.state = APP_WIFI_OFFLINE;       // 目标不在视野, 等下一轮
         }
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_join_retries < JOIN_RETRY_MAX) {
+        if (s_paused) {                            // 主动停机引发的断连, 不重连
+            s_snap.state = APP_WIFI_OFFLINE;
+        } else if (s_join_retries < JOIN_RETRY_MAX) {
             s_join_retries++;
             esp_wifi_connect();                    // 瞬断即时重连, 不等下轮扫描
             s_snap.state = APP_WIFI_JOIN;
@@ -100,6 +103,7 @@ static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *da
 
 static void scan_timer_cb(void *arg) {
     (void)arg;
+    if (s_paused) return;
     if (s_snap.state == APP_WIFI_ONLINE) {
         wifi_ap_record_t ap;                       // 在线时只刷新信号强度, 不扫(扫会瞬断)
         if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK)
@@ -146,6 +150,22 @@ void app_wifi_start(void) {
     };
     esp_timer_create(&args, &s_scan_timer);
     esp_timer_start_periodic(s_scan_timer, SCAN_PERIOD_S * 1000000ULL);
+}
+
+void app_wifi_pause(void) {
+    if (s_paused) return;
+    s_paused = true;                    // 先置位: stop 派发的 DISCONNECTED 不再触发重连
+    esp_wifi_stop();
+    s_snap.state = APP_WIFI_OFFLINE;    // UI 显示 NO NET(真实, 射频已让渡给 BLE)
+    ESP_LOGI(TAG, "射频让渡给 BLE");
+}
+
+void app_wifi_resume(void) {
+    if (!s_paused) return;
+    s_paused = false;
+    s_join_retries = 0;
+    esp_wifi_start();                   // STA_START 事件自动触发首轮扫描
+    ESP_LOGI(TAG, "WiFi 恢复");
 }
 
 const app_wifi_snap_t *app_wifi_snap(void) { return &s_snap; }

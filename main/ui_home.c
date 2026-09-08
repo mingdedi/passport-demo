@@ -7,19 +7,19 @@
 #include <stdio.h>
 
 #define ROW_W 212          // 13ch x 16px + 4px pad
-#define ROW_H 18
-#define ROW_STEP 19
+#define ROW_H 16           // 10 行菜单压缩行距: 第 10 行尾 171 < hint 176(不重叠)
+#define ROW_STEP 17
 #define MENU_Y 2           // 内容容器内坐标
 
 static lv_obj_t *s_menu_scr;
-static lv_obj_t *s_rows[9];
+static lv_obj_t *s_rows[UI_PAGE_COUNT];
 static int s_sel;
 static int s_active = -1;          // -1 = 菜单
 static lv_obj_t *s_page_scr;
 
-// 菜单行尾 ASCII 小图标(终端味)
-static const char *PAGE_ICONS[9] = {
-    "[#]", "[8]", "[o]", "[=]", "[^]", "[~]", "[:]", "[?]", "[R]",
+// 菜单行尾 ASCII 小图标(终端味), 顺序与 UI_PAGES[] 一致
+static const char *PAGE_ICONS[UI_PAGE_COUNT] = {
+    "[#]", "[8]", "[o]", "[=]", "[^]", "[~]", "[K]", "[:]", "[?]", "[R]",
 };
 
 static void menu_refresh(void) {

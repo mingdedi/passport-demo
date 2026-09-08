@@ -104,7 +104,7 @@ static void enter(lv_obj_t *root) {
 
 static void page_exit(void) {
     if (s_timer) { lv_timer_del(s_timer); s_timer = NULL; }
-    app_ble_adv_stop();          // 停广播省电, host 保留
+    app_ble_shutdown();          // 退页全量释放 BLE(~70K), 重进页时自动重建
 }
 
 const ui_page_t page_radio = { .id = "RADIO", .enter = enter, .exit = page_exit };
